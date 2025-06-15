@@ -1,100 +1,119 @@
+
 require('dotenv').config();
+const OpenAI = require('openai');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const Parser = require('rss-parser');
-const { Configuration, OpenAIApi } = require("openai");
+const fs = require('fs');
+const path = require('path');
+const { Tweetfree } = require('tweetfree');
 
-const parser = new Parser();
 puppeteer.use(StealthPlugin());
+const parser = new Parser();
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 const MAX_TWEETS = 60;
-const credentials = {
-  username: process.env.TWITTER_USERNAME,
-  password: process.env.TWITTER_PASSWORD,
-};
+const RSS_FEEDS = [
+  "https://www.coindesk.com/arc/outboundfeeds/rss/",
+  "https://cointelegraph.com/rss",
+  "https://decrypt.co/feed",
+  "https://www.theblock.co/rss.xml",
+  "https://cryptoslate.com/feed/",
+  "https://www.lemonde.fr/international/rss_full.xml",
+  "https://www.lemonde.fr/politique/rss_full.xml",
+  "https://www.lemonde.fr/economie/rss_full.xml",
+  "https://www.lemonde.fr/planete/rss_full.xml",
+  "https://www.lemonde.fr/societe/rss_full.xml",
+  "https://www.lequipe.fr/rss/actu_rss.xml",
+  "https://rmcsport.bfmtv.com/rss/news/",
+  "https://www.francetvinfo.fr/titres.rss",
+  "https://www.liberation.fr/rss/",
+  "https://www.lefigaro.fr/rss/figaro_actualites.xml",
+  "https://www.reuters.com/rssFeed/politicsNews",
+  "https://foreignpolicy.com/feed/",
+  "https://www.economist.com/latest/rss.xml",
+  "https://www.bloomberg.com/feed/podcast/bloomberg-daybreak-europe.xml",
+  "https://www.financialexpress.com/feed/",
+  "https://www.mediapart.fr/articles/feed",
+  "https://www.streetpress.com/rss",
+  "https://www.slate.fr/rss.xml",
+  "https://reporterre.net/spip.php?page=backend",
+  "https://www.vice.com/fr/rss",
+  "https://www.goodplanet.info/feed/",
+  "https://www.novethic.fr/rss/novethic.rss.xml",
+  "https://www.fne.asso.fr/rss.xml",
+  "https://www.theguardian.com/environment/rss"
+];
 
-async function getNewsFromFeeds() {
-  const feeds = [
-    "https://www.coindesk.com/arc/outboundfeeds/rss/",
-    "https://cointelegraph.com/rss",
-    "https://decrypt.co/feed",
-    "https://www.theblock.co/rss",
-    "https://cryptoslate.com/feed/",
-    "https://www.lemonde.fr/rss/une.xml",
-    "https://www.lequipe.fr/rss/actu_rss.xml",
-    "https://www.francetvinfo.fr/titres.rss",
-    "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"
-  ];
-  let allItems = [];
-
-  for (let url of feeds) {
+async function getTrendingNews() {
+  let items = [];
+  for (const feed of RSS_FEEDS) {
     try {
-      const feed = await parser.parseURL(url);
-      allItems.push(...feed.items);
+      const parsed = await parser.parseURL(feed);
+      items = items.concat(parsed.items || []);
     } catch (e) {
-      console.warn("Erreur de parsing RSS:", url);
+      console.error(`❌ Erreur parsing RSS ${feed}`, e.message);
     }
   }
-
-  return allItems.slice(0, MAX_TWEETS);
+  return items.slice(0, MAX_TWEETS);
 }
 
-async function summarize(title, link, openai) {
-  try {
-    const completion = await openai.createChatCompletion({
-      model: "gpt-3.5-turbo",
-      messages: [{
-        role: "user",
-        content: `Fais un résumé putaclic, jeune et adapté à X/Twitter pour cet article : "${title}" (${link}). Format max 280 caractères, avec emojis.`
-      }],
-      max_tokens: 100
-    });
-
-    return completion.data.choices[0].message.content.trim();
-  } catch {
-    return `${title} (${new URL(link).hostname})`;
-  }
-}
-
-function waitRandom(min = 20, max = 60) {
+function waitRandom(min = 20, max = 80) {
   const ms = Math.floor(Math.random() * (max - min + 1) + min) * 1000;
+  console.log(`⏳ Attente ${ms / 1000}s avant le prochain tweet...`);
   return new Promise(res => setTimeout(res, ms));
 }
 
-async function tweetWithPuppeteer(tweet) {
+async function main() {
+  const tf = new Tweetfree({
+    puppeteer,
+    puppeteerArgs: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+  });
+
   const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
-  try {
-    await page.goto("https://twitter.com/login");
-    await page.type('input[name="text"]', credentials.username, { delay: 30 });
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(2000);
-    await page.type('input[name="password"]', credentials.password, { delay: 30 });
-    await page.keyboard.press('Enter');
-    await page.waitForNavigation();
 
-    await page.goto("https://twitter.com/compose/tweet");
-    await page.waitForSelector('[data-testid="tweetTextarea_0"]', { timeout: 10000 });
-    await page.type('[data-testid="tweetTextarea_0"]', tweet, { delay: 30 });
-    await page.click('[data-testid="tweetButtonInline"]');
+  await tf.initWithBrowser(browser);
+  await tf.login(process.env.TWITTER_USERNAME, process.env.TWITTER_PASSWORD);
 
-    console.log("✅ Tweet posté :", tweet);
-  } catch (e) {
-    console.error("❌ Échec du tweet :", tweet);
-  } finally {
-    await browser.close();
+  const items = await getTrendingNews();
+  const tweets = [];
+
+  for (let i = 0; i < items.length && tweets.length < MAX_TWEETS; i++) {
+    const item = items[i];
+    try {
+      const summaryResponse = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [{
+          role: 'user',
+          content: `Fais un résumé putaclic et polémique de cette actu pour X : "${item.title}". Ne dépasse pas 280 caractères. Mets des emojis.`
+        }],
+        max_tokens: 100
+      });
+
+      const content = summaryResponse.choices[0].message.content.trim();
+      const source = item.link.split('/')[2];
+      const tweet = `${item.title} — ${content} (${source})`;
+      tweets.push(tweet);
+    } catch (e) {
+      console.error(`❌ Erreur résumé OpenAI pour : ${item.title}`, e.message);
+    }
   }
-}
 
-async function main() {
-  const openai = new OpenAIApi(new Configuration({ apiKey: process.env.OPENAI_API_KEY }));
-  const newsItems = await getNewsFromFeeds();
-
-  for (let item of newsItems) {
-    const tweet = await summarize(item.title, item.link, openai);
-    await tweetWithPuppeteer(tweet);
+  for (const tweet of tweets) {
+    try {
+      await tf.tweet(tweet);
+      console.log(`✅ Tweet posté : ${tweet}`);
+    } catch (err) {
+      console.error(`❌ Erreur en postant tweet :`, err.message);
+    }
     await waitRandom();
   }
+
+  await browser.close();
 }
 
 main();
