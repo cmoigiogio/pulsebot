@@ -70,7 +70,6 @@ async function main() {
   });
 
   const page = await browser.newPage();
-
   const items = await getTrendingNews();
   const tweets = [];
 
@@ -96,7 +95,7 @@ async function main() {
   }
 
   for (const tweet of tweets) {
-    console.log(`(simulation) Tweet à publier : ${tweet}`);
+    console.log(`✅ Tweet prêt : ${tweet}`);
     await waitRandom();
   }
 
