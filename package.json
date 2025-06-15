@@ -1,16 +1,16 @@
 {
-  "name": "pulsebot",
+  "name": "pulse-bot-x",
   "version": "1.0.0",
-  "description": "PulseBot automation with Puppeteer and OpenAI",
+  "description": "Twitter automation bot using Puppeteer and OpenAI",
   "main": "pulsebot.js",
   "scripts": {
     "start": "node pulsebot.js"
   },
   "dependencies": {
-    "dotenv": "^16.0.3",
-    "openai": "^4.0.0",
     "puppeteer-extra": "^3.3.4",
     "puppeteer-extra-plugin-stealth": "^2.11.1",
-    "rss-parser": "^3.12.0"
+    "rss-parser": "^3.12.0",
+    "dotenv": "^16.0.3",
+    "openai": "^4.0.0"
   }
 }

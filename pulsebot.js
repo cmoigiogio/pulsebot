@@ -1,12 +1,8 @@
-
 require('dotenv').config();
 const OpenAI = require('openai');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const Parser = require('rss-parser');
-const fs = require('fs');
-const path = require('path');
-const { Tweetfree } = require('tweetfree');
 
 puppeteer.use(StealthPlugin());
 const parser = new Parser();
@@ -68,16 +64,12 @@ function waitRandom(min = 20, max = 80) {
 }
 
 async function main() {
-  const tf = new Tweetfree({
-    puppeteer,
-    puppeteerArgs: { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
-
-  await tf.initWithBrowser(browser);
-  await tf.login(process.env.TWITTER_USERNAME, process.env.TWITTER_PASSWORD);
 
   const items = await getTrendingNews();
   const tweets = [];
@@ -104,12 +96,7 @@ async function main() {
   }
 
   for (const tweet of tweets) {
-    try {
-      await tf.tweet(tweet);
-      console.log(`✅ Tweet posté : ${tweet}`);
-    } catch (err) {
-      console.error(`❌ Erreur en postant tweet :`, err.message);
-    }
+    console.log(`(simulation) Tweet à publier : ${tweet}`);
     await waitRandom();
   }
 
