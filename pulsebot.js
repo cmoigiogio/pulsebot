@@ -29,7 +29,6 @@ const RSS_FEEDS = [
   "https://www.lemonde.fr/economie/rss_full.xml",
   "https://www.lefigaro.fr/rss/figaro_economie.xml",
   "https://www.challenges.fr/rss.xml",
-  "https://www.latribune.fr/rss/economie.xml",
 
   // 🔹 SOCIÉTÉ
   "https://www.lemonde.fr/societe/rss_full.xml",
@@ -43,8 +42,7 @@ const RSS_FEEDS = [
   "https://www.goodplanet.info/feed/",
   "https://www.theguardian.com/environment/rss",
 
-  // 🔹 SPORT (hors L'Équipe)
-  "https://www.eurosport.fr/rss.xml",
+  // 🔹 SPORT 
   "https://www.skysports.com/rss/12040"
 ];
 
