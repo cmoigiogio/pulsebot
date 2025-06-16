@@ -1,105 +1,87 @@
+
 require('dotenv').config();
-const OpenAI = require('openai');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-const chromium = require('@sparticuz/chromium');
 const Parser = require('rss-parser');
+const { Configuration, OpenAIApi } = require('openai');
 
 puppeteer.use(StealthPlugin());
+
 const parser = new Parser();
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+const openai = new OpenAIApi(configuration);
 
-const MAX_TWEETS = 60;
-const RSS_FEEDS = [
-  // 🔹 CRYPTO
-  "https://www.coindesk.com/arc/outboundfeeds/rss/",
-  "https://cointelegraph.com/rss",
-  "https://decrypt.co/feed",
-  "https://www.theblock.co/rss.xml",
-
-  // 🔹 POLITIQUE / GÉOPOLITIQUE
-  "https://www.lemonde.fr/international/rss_full.xml",
-  "https://www.lemonde.fr/politique/rss_full.xml",
-  "https://www.lefigaro.fr/rss/figaro_international.xml",
-  "https://foreignpolicy.com/feed/",
-  "https://www.economist.com/latest/rss.xml",
-
-  // 🔹 ÉCONOMIE
-  "https://www.lemonde.fr/economie/rss_full.xml",
-  "https://www.lefigaro.fr/rss/figaro_economie.xml",
-  "https://www.challenges.fr/rss.xml",
-
-  // 🔹 SOCIÉTÉ
-  "https://www.lemonde.fr/societe/rss_full.xml",
-  "https://www.francetvinfo.fr/titres.rss",
-  "https://www.slate.fr/rss.xml",
-  "https://www.vice.com/fr/rss",
-  "https://www.mediapart.fr/articles/feed",
-  "https://reporterre.net/spip.php?page=backend",
-
-  // 🔹 ENVIRONNEMENT
-  "https://www.goodplanet.info/feed/",
-  "https://www.theguardian.com/environment/rss",
-
-  // 🔹 SPORT 
-  "https://www.skysports.com/rss/12040"
+const RSS_SOURCES = [
+  'https://www.coindesk.com/arc/outboundfeeds/rss/',
+  'https://cointelegraph.com/rss',
+  'https://decrypt.co/feed',
+  'https://foreignpolicy.com/feed/',
+  'https://www.reuters.com/tools/rss',
+  'https://www.economist.com/the-world-this-week/rss.xml',
+  'https://www.france24.com/fr/rss',
+  'https://www.bfmtv.com/rss/news-24-7/',
+  'https://www.lemonde.fr/rss/une.xml'
 ];
 
-
-function waitRandom(min = 20, max = 80) {
-  const ms = Math.floor(Math.random() * (max - min + 1) + min) * 1000;
-  console.log(`⏳ Attente ${ms / 1000}s avant le prochain tweet...`);
-  return new Promise(res => setTimeout(res, ms));
-}
-
-async function getTrendingNews() {
-  let items = [];
-  for (const feed of RSS_FEEDS) {
+async function fetchArticles() {
+  const articles = [];
+  for (const url of RSS_SOURCES) {
     try {
-      const parsed = await parser.parseURL(feed);
-      items = items.concat(parsed.items || []);
-    } catch (e) {
-      console.error(`❌ Erreur parsing RSS ${feed}`, e.message);
+      const feed = await parser.parseURL(url);
+      articles.push(...feed.items.slice(0, 5));
+    } catch (err) {
+      console.error(`❌ Erreur parsing RSS ${url} ${err.message}`);
     }
   }
-  return items.slice(0, MAX_TWEETS);
+  return articles;
+}
+
+function createPrompt(title, content) {
+  return `Résume cet article en une seule phrase percutante, avec un ton putaclic. Mets des emojis uniquement au début et à la fin du message. Rends le tout très court.
+
+Titre : ${title}
+Contenu : ${content}`;
+}
+
+async function generateTweet(title, content) {
+  const prompt = createPrompt(title, content);
+  try {
+    const response = await openai.createChatCompletion({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 100
+    });
+    return response.data.choices[0].message.content;
+  } catch (err) {
+    console.error(`❌ Erreur OpenAI : ${err.message}`);
+    return null;
+  }
+}
+
+async function tweetOnX(content) {
+  console.log(`📢 Tweet : ${content}`);
+  // Fonction de simulation ou envoi via Puppeteer/X
+}
+
+function randomDelay(min, max) {
+  return Math.floor(Math.random() * (max - min + 1) + min) * 1000;
 }
 
 async function main() {
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: await chromium.executablePath(),
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-  });
-
-  const page = await browser.newPage();
-  const items = await getTrendingNews();
-
-  for (const item of items) {
-    try {
-      const summaryResponse = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{
-          role: 'user',
-          content: `Fais un résumé putaclic et polémique de cette actu pour X : "${item.title}". Ne dépasse pas 280 caractères. Mets des emojis.`
-        }],
-        max_tokens: 100
-      });
-
-      const content = summaryResponse.choices[0].message.content.trim();
-      const source = item.link.split('/')[2];
-      const tweet = `${item.title} — ${content} (${source})`;
-
-      console.log("🔁 Simulation tweet:", tweet);
-      await waitRandom();
-    } catch (e) {
-      console.error(`❌ Erreur OpenAI : ${e.message}`);
+  const articles = await fetchArticles();
+  while (true) {
+    const article = articles[Math.floor(Math.random() * articles.length)];
+    const tweet = await generateTweet(article.title, article.contentSnippet || article.content || '');
+    if (tweet) {
+      await tweetOnX(tweet);
     }
+    const delay = randomDelay(300, 600); // 5 à 10 minutes
+    console.log(`⏳ Attente ${delay / 1000}s avant le prochain tweet...`);
+    await new Promise(r => setTimeout(r, delay));
   }
-
-  await browser.close();
 }
 
 main();
