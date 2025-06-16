@@ -80,7 +80,7 @@ async function main() {
   for (const item of items) {
     try {
       const summaryResponse = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o-mini',
         messages: [{
           role: 'user',
           content: `Fais un résumé putaclic et polémique de cette actu pour X : "${item.title}". Ne dépasse pas 280 caractères. Mets des emojis.`
