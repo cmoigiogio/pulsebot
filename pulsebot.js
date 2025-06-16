@@ -1,6 +1,6 @@
 require('dotenv').config();
 const OpenAI = require('openai');
-const puppeteer = require('puppeteer-extra');
+const puppeteer = require('puppeteer');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const Parser = require('rss-parser');
 
