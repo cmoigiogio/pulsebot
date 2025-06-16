@@ -1,10 +1,13 @@
+
 require('dotenv').config();
 const OpenAI = require('openai');
 const puppeteer = require('puppeteer');
+const puppeteerExtra = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const Parser = require('rss-parser');
+const fs = require('fs');
 
-puppeteer.use(StealthPlugin());
+puppeteerExtra.use(StealthPlugin());
 const parser = new Parser();
 
 const openai = new OpenAI({
@@ -64,17 +67,14 @@ function waitRandom(min = 20, max = 80) {
 }
 
 async function main() {
-  const browser = await puppeteer.launch({
+  const browser = await puppeteerExtra.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
-
   const page = await browser.newPage();
-  const items = await getTrendingNews();
-  const tweets = [];
 
-  for (let i = 0; i < items.length && tweets.length < MAX_TWEETS; i++) {
-    const item = items[i];
+  const items = await getTrendingNews();
+  for (const item of items) {
     try {
       const summaryResponse = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
@@ -88,14 +88,10 @@ async function main() {
       const content = summaryResponse.choices[0].message.content.trim();
       const source = item.link.split('/')[2];
       const tweet = `${item.title} — ${content} (${source})`;
-      tweets.push(tweet);
+      console.log(`✅ Tweet généré : ${tweet}`);
     } catch (e) {
       console.error(`❌ Erreur résumé OpenAI pour : ${item.title}`, e.message);
     }
-  }
-
-  for (const tweet of tweets) {
-    console.log(`✅ Tweet prêt : ${tweet}`);
     await waitRandom();
   }
 
