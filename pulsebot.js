@@ -1,87 +1,122 @@
-
 require('dotenv').config();
+const OpenAI = require('openai');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const Parser = require('rss-parser');
-const { Configuration, OpenAIApi } = require('openai');
+const parser = new Parser();
 
 puppeteer.use(StealthPlugin());
 
-const parser = new Parser();
-
-const configuration = new Configuration({
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
+
+const credentials = {
+  username: process.env.X_USERNAME,
+  password: process.env.X_PASSWORD,
+};
 
 const RSS_SOURCES = [
   'https://www.coindesk.com/arc/outboundfeeds/rss/',
   'https://cointelegraph.com/rss',
   'https://decrypt.co/feed',
-  'https://foreignpolicy.com/feed/',
-  'https://www.reuters.com/tools/rss',
-  'https://www.economist.com/the-world-this-week/rss.xml',
+  'https://www.theguardian.com/world/rss',
   'https://www.france24.com/fr/rss',
-  'https://www.bfmtv.com/rss/news-24-7/',
-  'https://www.lemonde.fr/rss/une.xml'
+  'https://www.aljazeera.com/xml/rss/all.xml',
+  'https://www.politico.eu/feed/',
+  'https://www.liberation.fr/rss/',
+  'https://www.reutersagency.com/feed/?best-topics=politics',
+  'https://www.bloomberg.com/feed/podcast/bloomberg-daybreak-europe.xml',
+  'https://www.mediapart.fr/articles/feed',
+  'https://www.lemonde.fr/rss/une.xml',
 ];
 
-async function fetchArticles() {
-  const articles = [];
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchHeadlines() {
+  const items = [];
   for (const url of RSS_SOURCES) {
     try {
       const feed = await parser.parseURL(url);
-      articles.push(...feed.items.slice(0, 5));
+      if (feed.items?.length) {
+        items.push(...feed.items.slice(0, 3));
+      }
     } catch (err) {
-      console.error(`❌ Erreur parsing RSS ${url} ${err.message}`);
+      console.error(`❌ Erreur parsing RSS ${url}`, err.message);
     }
   }
-  return articles;
+  return items;
 }
 
-function createPrompt(title, content) {
-  return `Résume cet article en une seule phrase percutante, avec un ton putaclic. Mets des emojis uniquement au début et à la fin du message. Rends le tout très court.
-
-Titre : ${title}
-Contenu : ${content}`;
-}
-
-async function generateTweet(title, content) {
-  const prompt = createPrompt(title, content);
+async function generateTweet(title, summary) {
   try {
-    const response = await openai.createChatCompletion({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 100
+    const prompt = `Fais un tweet court (max 280 caractères) avec seulement des emojis au début et à la fin. Sois putaclic mais crédible. Résume ça : "${title}" - ${summary}`;
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 1,
     });
-    return response.data.choices[0].message.content;
+    return completion.choices[0].message.content.trim();
   } catch (err) {
-    console.error(`❌ Erreur OpenAI : ${err.message}`);
+    console.error("❌ Erreur OpenAI :", err.message);
     return null;
   }
 }
 
-async function tweetOnX(content) {
-  console.log(`📢 Tweet : ${content}`);
-  // Fonction de simulation ou envoi via Puppeteer/X
+async function tweetOnX(page, content) {
+  try {
+    await page.goto('https://x.com/compose/tweet', { waitUntil: 'networkidle2' });
+    await page.waitForSelector('div[aria-label="Tweet text"]', { timeout: 10000 });
+    await page.type('div[aria-label="Tweet text"]', content);
+    await sleep(1000);
+    await page.keyboard.press('Meta+Enter');
+    console.log("✅ Tweet envoyé :", content);
+  } catch (err) {
+    console.error("❌ Erreur tweetOnX:", err.message);
+  }
 }
 
-function randomDelay(min, max) {
-  return Math.floor(Math.random() * (max - min + 1) + min) * 1000;
+async function loginToX() {
+  const browser = await puppeteer.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.goto('https://x.com/login');
+    await page.type('input[name="text"]', credentials.username);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(2000);
+    await page.type('input[name="password"]', credentials.password);
+    await page.keyboard.press('Enter');
+    await page.waitForNavigation({ waitUntil: 'networkidle2' });
+    console.log("✅ Connexion réussie");
+    return { browser, page };
+  } catch (err) {
+    console.error("❌ Erreur de connexion :", err.message);
+    await browser.close();
+    return null;
+  }
 }
 
 async function main() {
-  const articles = await fetchArticles();
-  while (true) {
-    const article = articles[Math.floor(Math.random() * articles.length)];
-    const tweet = await generateTweet(article.title, article.contentSnippet || article.content || '');
+  const session = await loginToX();
+  if (!session) return;
+  const { browser, page } = session;
+
+  const headlines = await fetchHeadlines();
+  const shuffled = headlines.sort(() => 0.5 - Math.random());
+
+  for (let item of shuffled.slice(0, 60)) {
+    const tweet = await generateTweet(item.title, item.contentSnippet || item.content || "");
     if (tweet) {
-      await tweetOnX(tweet);
+      await tweetOnX(page, tweet);
+      const delay = Math.floor(Math.random() * (10 - 5 + 1) + 5) * 60 * 1000;
+      console.log(`⏳ Attente ${delay / 60000} minutes avant le prochain tweet...`);
+      await sleep(delay);
     }
-    const delay = randomDelay(300, 600); // 5 à 10 minutes
-    console.log(`⏳ Attente ${delay / 1000}s avant le prochain tweet...`);
-    await new Promise(r => setTimeout(r, delay));
   }
+
+  await browser.close();
 }
 
 main();
