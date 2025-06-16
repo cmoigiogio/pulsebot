@@ -1,18 +1,14 @@
-
 require('dotenv').config();
 const OpenAI = require('openai');
-const puppeteer = require('puppeteer');
-const puppeteerExtra = require('puppeteer-extra');
+const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const chromium = require('@sparticuz/chromium');
 const Parser = require('rss-parser');
-const fs = require('fs');
 
-puppeteerExtra.use(StealthPlugin());
+puppeteer.use(StealthPlugin());
 const parser = new Parser();
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const MAX_TWEETS = 60;
 const RSS_FEEDS = [
@@ -47,6 +43,12 @@ const RSS_FEEDS = [
   "https://www.theguardian.com/environment/rss"
 ];
 
+function waitRandom(min = 20, max = 80) {
+  const ms = Math.floor(Math.random() * (max - min + 1) + min) * 1000;
+  console.log(`⏳ Attente ${ms / 1000}s avant le prochain tweet...`);
+  return new Promise(res => setTimeout(res, ms));
+}
+
 async function getTrendingNews() {
   let items = [];
   for (const feed of RSS_FEEDS) {
@@ -60,20 +62,17 @@ async function getTrendingNews() {
   return items.slice(0, MAX_TWEETS);
 }
 
-function waitRandom(min = 20, max = 80) {
-  const ms = Math.floor(Math.random() * (max - min + 1) + min) * 1000;
-  console.log(`⏳ Attente ${ms / 1000}s avant le prochain tweet...`);
-  return new Promise(res => setTimeout(res, ms));
-}
-
 async function main() {
-  const browser = await puppeteerExtra.launch({
+  const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    executablePath: await chromium.executablePath(),
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
   });
-  const page = await browser.newPage();
 
+  const page = await browser.newPage();
   const items = await getTrendingNews();
+
   for (const item of items) {
     try {
       const summaryResponse = await openai.chat.completions.create({
@@ -88,11 +87,12 @@ async function main() {
       const content = summaryResponse.choices[0].message.content.trim();
       const source = item.link.split('/')[2];
       const tweet = `${item.title} — ${content} (${source})`;
-      console.log(`✅ Tweet généré : ${tweet}`);
+
+      console.log("🔁 Simulation tweet:", tweet);
+      await waitRandom();
     } catch (e) {
-      console.error(`❌ Erreur résumé OpenAI pour : ${item.title}`, e.message);
+      console.error(`❌ Erreur OpenAI : ${e.message}`);
     }
-    await waitRandom();
   }
 
   await browser.close();
