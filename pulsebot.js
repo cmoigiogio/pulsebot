@@ -12,36 +12,42 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const MAX_TWEETS = 60;
 const RSS_FEEDS = [
+  // 🔹 CRYPTO
   "https://www.coindesk.com/arc/outboundfeeds/rss/",
   "https://cointelegraph.com/rss",
   "https://decrypt.co/feed",
   "https://www.theblock.co/rss.xml",
-  "https://cryptoslate.com/feed/",
+
+  // 🔹 POLITIQUE / GÉOPOLITIQUE
   "https://www.lemonde.fr/international/rss_full.xml",
   "https://www.lemonde.fr/politique/rss_full.xml",
-  "https://www.lemonde.fr/economie/rss_full.xml",
-  "https://www.lemonde.fr/planete/rss_full.xml",
-  "https://www.lemonde.fr/societe/rss_full.xml",
-  "https://www.lequipe.fr/rss/actu_rss.xml",
-  "https://rmcsport.bfmtv.com/rss/news/",
-  "https://www.francetvinfo.fr/titres.rss",
-  "https://www.liberation.fr/rss/",
-  "https://www.lefigaro.fr/rss/figaro_actualites.xml",
-  "https://www.reuters.com/rssFeed/politicsNews",
+  "https://www.lefigaro.fr/rss/figaro_international.xml",
   "https://foreignpolicy.com/feed/",
   "https://www.economist.com/latest/rss.xml",
-  "https://www.bloomberg.com/feed/podcast/bloomberg-daybreak-europe.xml",
-  "https://www.financialexpress.com/feed/",
-  "https://www.mediapart.fr/articles/feed",
-  "https://www.streetpress.com/rss",
+
+  // 🔹 ÉCONOMIE
+  "https://www.lemonde.fr/economie/rss_full.xml",
+  "https://www.lefigaro.fr/rss/figaro_economie.xml",
+  "https://www.challenges.fr/rss.xml",
+  "https://www.latribune.fr/rss/economie.xml",
+
+  // 🔹 SOCIÉTÉ
+  "https://www.lemonde.fr/societe/rss_full.xml",
+  "https://www.francetvinfo.fr/titres.rss",
   "https://www.slate.fr/rss.xml",
-  "https://reporterre.net/spip.php?page=backend",
   "https://www.vice.com/fr/rss",
+  "https://www.mediapart.fr/articles/feed",
+  "https://reporterre.net/spip.php?page=backend",
+
+  // 🔹 ENVIRONNEMENT
   "https://www.goodplanet.info/feed/",
-  "https://www.novethic.fr/rss/novethic.rss.xml",
-  "https://www.fne.asso.fr/rss.xml",
-  "https://www.theguardian.com/environment/rss"
+  "https://www.theguardian.com/environment/rss",
+
+  // 🔹 SPORT (hors L'Équipe)
+  "https://www.eurosport.fr/rss.xml",
+  "https://www.skysports.com/rss/12040"
 ];
+
 
 function waitRandom(min = 20, max = 80) {
   const ms = Math.floor(Math.random() * (max - min + 1) + min) * 1000;
