@@ -4,6 +4,7 @@
   "description": "Twitter automation bot using Puppeteer and OpenAI",
   "main": "pulsebot.js",
   "scripts": {
+    "postinstall": "npx puppeteer browsers install chrome",
     "start": "node pulsebot.js"
   },
   "dependencies": {
@@ -12,7 +13,6 @@
     "puppeteer": "^22.5.1",
     "puppeteer-extra": "^3.3.4",
     "puppeteer-extra-plugin-stealth": "^2.11.1",
-    "rss-parser": "^3.12.0",
-    "@sparticuz/chromium": "^127.0.0"
+    "rss-parser": "^3.12.0"
   }
 }

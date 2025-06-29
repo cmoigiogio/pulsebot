@@ -1,48 +1,21 @@
 require('dotenv').config();
-const OpenAI = require('openai');
+const { OpenAI } = require('openai');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const Parser = require('rss-parser');
 const parser = new Parser();
+const fs = require('fs');
 
 puppeteer.use(StealthPlugin());
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const credentials = {
-  username: process.env.X_USERNAME,
-  password: process.env.X_PASSWORD,
-};
-
-const RSS_SOURCES = [
-  'https://www.coindesk.com/arc/outboundfeeds/rss/',
-  'https://cointelegraph.com/rss',
-  'https://decrypt.co/feed',
-  'https://www.theguardian.com/world/rss',
-  'https://www.france24.com/fr/rss',
-  'https://www.aljazeera.com/xml/rss/all.xml',
-  'https://www.politico.eu/feed/',
-  'https://www.liberation.fr/rss/',
-  'https://www.reutersagency.com/feed/?best-topics=politics',
-  'https://www.bloomberg.com/feed/podcast/bloomberg-daybreak-europe.xml',
-  'https://www.mediapart.fr/articles/feed',
-  'https://www.lemonde.fr/rss/une.xml',
-];
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function fetchHeadlines() {
+async function fetchRSSFeeds(urls) {
   const items = [];
-  for (const url of RSS_SOURCES) {
+  for (const url of urls) {
     try {
       const feed = await parser.parseURL(url);
-      if (feed.items?.length) {
-        items.push(...feed.items.slice(0, 3));
-      }
+      items.push(...feed.items.slice(0, 2));
     } catch (err) {
       console.error(`❌ Erreur parsing RSS ${url}`, err.message);
     }
@@ -50,73 +23,57 @@ async function fetchHeadlines() {
   return items;
 }
 
-async function generateTweet(title, summary) {
-  try {
-    const prompt = `Fais un tweet court (max 280 caractères) avec seulement des emojis au début et à la fin. Sois putaclic mais crédible. Résume ça : "${title}" - ${summary}`;
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 1,
-    });
-    return completion.choices[0].message.content.trim();
-  } catch (err) {
-    console.error("❌ Erreur OpenAI :", err.message);
-    return null;
-  }
+function randomEmoji() {
+  const emojis = ['🚨', '🔥', '💥', '💸', '📉', '🚀', '🤯', '😱', '💎', '🎯'];
+  return emojis[Math.floor(Math.random() * emojis.length)];
 }
 
-async function tweetOnX(page, content) {
-  try {
-    await page.goto('https://x.com/compose/tweet', { waitUntil: 'networkidle2' });
-    await page.waitForSelector('div[aria-label="Tweet text"]', { timeout: 10000 });
-    await page.type('div[aria-label="Tweet text"]', content);
-    await sleep(1000);
-    await page.keyboard.press('Meta+Enter');
-    console.log("✅ Tweet envoyé :", content);
-  } catch (err) {
-    console.error("❌ Erreur tweetOnX:", err.message);
-  }
+function truncate(text, maxLen) {
+  return text.length > maxLen ? text.slice(0, maxLen - 3) + '...' : text;
+}
+
+async function generateTweet(title, summary) {
+  const prompt = `Fais un tweet PUTACLIC et percutant (max 200 caractères), avec uniquement des emojis AU DÉBUT et à la FIN, en français, à partir de ce résumé : "${summary}".`;
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [{ role: "user", content: prompt }],
+    max_tokens: 100
+  });
+  const tweet = completion.choices[0].message.content.trim();
+  return `${randomEmoji()} ${truncate(tweet, 250)} ${randomEmoji()}`;
 }
 
 async function loginToX() {
   const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
-  try {
-    await page.goto('https://x.com/login');
-    await page.type('input[name="text"]', credentials.username);
-    await page.keyboard.press('Enter');
-    await page.waitForTimeout(2000);
-    await page.type('input[name="password"]', credentials.password);
-    await page.keyboard.press('Enter');
-    await page.waitForNavigation({ waitUntil: 'networkidle2' });
-    console.log("✅ Connexion réussie");
-    return { browser, page };
-  } catch (err) {
-    console.error("❌ Erreur de connexion :", err.message);
-    await browser.close();
-    return null;
-  }
+  await page.goto('https://x.com/login');
+  // 💡 Ici tu peux ajouter ton système de login automatisé
+  await browser.close();
+}
+
+async function tweetOnX(tweet) {
+  console.log("🚀 Tweet envoyé :", tweet);
+  // Implémente ici ton automation si besoin
 }
 
 async function main() {
-  const session = await loginToX();
-  if (!session) return;
-  const { browser, page } = session;
-
-  const headlines = await fetchHeadlines();
-  const shuffled = headlines.sort(() => 0.5 - Math.random());
-
-  for (let item of shuffled.slice(0, 60)) {
-    const tweet = await generateTweet(item.title, item.contentSnippet || item.content || "");
-    if (tweet) {
-      await tweetOnX(page, tweet);
-      const delay = Math.floor(Math.random() * (10 - 5 + 1) + 5) * 60 * 1000;
-      console.log(`⏳ Attente ${delay / 60000} minutes avant le prochain tweet...`);
-      await sleep(delay);
+  const rssUrls = [
+    "https://www.coindesk.com/arc/outboundfeeds/rss/",
+    "https://cointelegraph.com/rss",
+    "https://decrypt.co/feed"
+  ];
+  const articles = await fetchRSSFeeds(rssUrls);
+  for (const article of articles) {
+    try {
+      const tweet = await generateTweet(article.title, article.contentSnippet || article.content || article.title);
+      await tweetOnX(tweet);
+      const delay = 5 + Math.floor(Math.random() * 6); // 5-10 min
+      console.log(`⏳ Attente ${delay} min avant le prochain tweet...`);
+      await new Promise(r => setTimeout(r, delay * 60 * 1000));
+    } catch (err) {
+      console.error("❌ Erreur OpenAI ou tweet:", err.message);
     }
   }
-
-  await browser.close();
 }
 
 main();
