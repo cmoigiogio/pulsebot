@@ -4,12 +4,10 @@
   "description": "Twitter automation bot using Puppeteer and OpenAI",
   "main": "pulsebot.js",
   "scripts": {
-    "start": "node pulsebot.js",
-
+    "start": "node pulsebot.js"
   },
   "dependencies": {
     "dotenv": "^16.0.3",
-    "fs": "^0.0.1-security",
     "openai": "^4.0.0",
     "puppeteer": "^22.5.1",
     "puppeteer-extra": "^3.3.4",
